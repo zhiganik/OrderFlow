@@ -1,0 +1,60 @@
+# OrderFlow — conventions for Claude Code
+
+## Structure
+Monorepo. Each service under services/{name}/ has four projects: Api, Application,
+Infrastructure, Tests. Reference direction is fixed:
+Infrastructure -> Application -> Contracts (Order/Inventory only)
+Api -> Application and Infrastructure (both)
+Tests -> Application
+Never reverse this — Application must never reference Infrastructure.
+
+## Folders
+Application: Domain/, Dtos/, Interfaces/, Services/, Validators/
+Infrastructure: Persistence/, Repositories/, Messaging/ (Order & Inventory only),
+Outbox/ and Inbox/ (Order & Inventory only, both directions — Order also consumes
+the inventory result event back)
+
+## Program.cs
+Two-stage Serilog init with try/catch/finally around host build and run (bootstrap
+logger catches startup failures before DI exists). Program.cs itself only calls
+builder.ConfigureDependencies() and app.ConfigureApplication() — no inline
+services.Add... or middleware calls belong in Program.cs directly.
+
+## DI split
+DependencyConfig.cs: every services.Add... call, IOptions<T> bindings, DbContext,
+repository registrations, FluentValidation, JWT auth, Swagger.
+ApplicationConfig.cs: middleware pipeline only, in order — exception handling,
+authentication, authorization, Swagger UI, MapControllers.
+
+## Config
+IOptions<T> everywhere in Application/Infrastructure code. IConfiguration is only
+ever touched inside DependencyConfig.cs to bind a section — never injected directly
+into a service or repository.
+
+## Contracts
+contracts/OrderFlow.Contracts holds only cross-service event DTOs
+(OrderCreatedEvent, InventoryReservedEvent, InventoryRejectedEvent). No shared
+domain logic. Referenced by Application layer (not Infrastructure) since deciding
+to raise an event is a business decision.
+
+## Repository pattern
+IRepository interfaces live in Application/Interfaces/, implementations in
+Infrastructure/Repositories/. Each repository exposes only the queries its service
+actually needs — no generic catch-all repository.
+
+## Data
+Fluent API entity configuration in Infrastructure/Persistence/Configurations/, one
+class per entity. Index every foreign key and every column used in a WHERE or
+ORDER BY on a table expected to grow.
+
+## Testing
+NUnit. One Tests project per service. Application-layer logic (services,
+validators) gets unit tests.
+
+## Secrets
+Never in appsettings.json. .env locally (git-ignored), .env.example committed as
+the template. Key Vault + Managed Identity in Azure.
+
+## Logging
+Serilog, structured (no string concatenation), console sink. Correlation ID
+enriched on every log line.
