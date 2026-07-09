@@ -72,8 +72,10 @@ services:
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
-    ports:
-      - "8081:8080"
+    # No `ports:` — only reachable from other containers on the `orderflow` network
+    # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
+    expose:
+      - "8080"
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -93,8 +95,10 @@ services:
       ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
-    ports:
-      - "8082:8080"
+    # No `ports:` — only reachable from other containers on the `orderflow` network
+    # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
+    expose:
+      - "8080"
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -116,8 +120,10 @@ services:
       ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
-    ports:
-      - "8083:8080"
+    # No `ports:` — only reachable from other containers on the `orderflow` network
+    # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
+    expose:
+      - "8080"
     depends_on:
       sqlserver:
         condition: service_healthy

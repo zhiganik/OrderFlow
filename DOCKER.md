@@ -228,24 +228,23 @@ the gateway's `8080`. That was a deliberate choice for this task (I used it to
 just trusting it), but it means the "everything goes through the gateway" rule
 currently only exists in your head, not in the compose file.
 
-To actually enforce it, in order of how far you want to take it:
-1. **Locally, in `docker-compose.yml`:** delete the `ports:` block from
-   `identity-api`/`order-api`/`inventory-api`. They'd still be reachable from
-   `gateway` (and from each other) over the `orderflow` Docker network — compose
-   networking doesn't need a published port for that — but nothing on your host
-   machine could reach `localhost:8081` anymore. This is the direct equivalent of
-   "only the gateway has a public port."
-2. **In a real deployment:** this becomes a network-layer rule, not an app-layer
-   one — a Kubernetes `NetworkPolicy`, an Azure NSG / private VNet, or simply not
-   giving Identity/Order/Inventory a public IP/ingress at all, so the gateway is the
-   only thing with a route in from outside.
-3. **Belt-and-suspenders (optional, usually only for zero-trust requirements):** a
-   shared secret header the gateway adds and downstream services require, or mTLS
-   between gateway and services — worth it only if you don't fully trust your own
-   network boundary.
+**Done.** `identity-api`/`order-api`/`inventory-api` no longer have a `ports:` block —
+each now has `expose: ["8080"]` instead, which documents that port 8080 exists
+without publishing it to the host. `docker compose ps` now shows `8080/tcp` for
+those three (container-internal only) instead of `0.0.0.0:8081->8080/tcp`. They're
+still fully reachable from `gateway` (and from each other) over the `orderflow`
+Docker network — Compose networking never needed a published port for that, only
+your host machine did. Verified: `curl localhost:8081` now fails to connect, while
+`curl localhost:8080/identity/...` through the gateway still returns 200.
 
-I left the debug ports in place since you'll likely want them while building out the
-DbContext/auth TODOs (much faster to `curl localhost:8082` directly than always
-round-trip through the gateway while iterating on one service). Say the word if you'd
-rather I remove them now and rely on `docker compose exec`/logs for local debugging
-instead.
+For a real deployment this same idea becomes a network-layer rule, not app config —
+a Kubernetes `NetworkPolicy`, an Azure NSG / private VNet, or simply not giving
+Identity/Order/Inventory a public IP/ingress at all, so the gateway is the only thing
+with a route in from outside. Belt-and-suspenders on top of that (only worth it for
+zero-trust requirements): a shared secret header the gateway adds and downstream
+services require, or mTLS between gateway and services.
+
+To debug a service directly now that its port isn't published: `docker compose exec
+order-api curl localhost:8080/swagger/index.html` (curl *from inside* the container),
+or `make logs-order`, or temporarily add back a `ports:` line while you're actively
+working on that one service.
