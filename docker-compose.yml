@@ -1,0 +1,153 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: orderflow-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - orderflow
+
+  sqledge:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    container_name: orderflow-sqledge
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    networks:
+      - orderflow
+
+  sb-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    container_name: orderflow-sb-emulator
+    environment:
+      ACCEPT_EULA: ${SERVICEBUS_ACCEPT_EULA}
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - ./docker/servicebus/Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+    ports:
+      - "5672:5672"
+    depends_on:
+      - sqledge
+    networks:
+      - orderflow
+
+  redis:
+    image: redis:7-alpine
+    container_name: orderflow-redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - orderflow
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: services/identity/Identity.Api/Dockerfile
+    container_name: orderflow-identity-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=IdentityDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8081:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - orderflow
+
+  order-api:
+    build:
+      context: .
+      dockerfile: services/order/Order.Api/Dockerfile
+    container_name: orderflow-order-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
+      ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8082:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sb-emulator:
+        condition: service_started
+    networks:
+      - orderflow
+
+  inventory-api:
+    build:
+      context: .
+      dockerfile: services/inventory/Inventory.Api/Dockerfile
+    container_name: orderflow-inventory-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=InventoryDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
+      ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8083:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sb-emulator:
+        condition: service_started
+    networks:
+      - orderflow
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Gateway/Dockerfile
+    container_name: orderflow-gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8080:8080"
+    depends_on:
+      - identity-api
+      - order-api
+      - inventory-api
+    networks:
+      - orderflow
+
+networks:
+  orderflow:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+  redis-data:

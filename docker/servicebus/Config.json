@@ -1,0 +1,37 @@
+{
+  "UserConfig": {
+    "Namespaces": [
+      {
+        "Name": "sbemulatorns",
+        "Queues": [
+          {
+            "Name": "order-created",
+            "Properties": {
+              "DefaultMessageTimeToLive": "PT1H",
+              "LockDuration": "PT1M",
+              "DuplicateDetectionHistoryTimeWindow": "PT20S",
+              "MaxDeliveryCount": 10,
+              "RequiresDuplicateDetection": false,
+              "RequiresSession": false
+            }
+          },
+          {
+            "Name": "inventory-result",
+            "Properties": {
+              "DefaultMessageTimeToLive": "PT1H",
+              "LockDuration": "PT1M",
+              "DuplicateDetectionHistoryTimeWindow": "PT20S",
+              "MaxDeliveryCount": 10,
+              "RequiresDuplicateDetection": false,
+              "RequiresSession": false
+            }
+          }
+        ],
+        "Topics": []
+      }
+    ],
+    "Logging": {
+      "Type": "File"
+    }
+  }
+}
