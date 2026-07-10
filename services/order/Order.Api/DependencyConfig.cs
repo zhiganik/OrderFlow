@@ -1,4 +1,15 @@
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using Order.Application.Interfaces;
+using Order.Application.Services;
+using Order.Application.Validators;
+using Order.Infrastructure.Persistence;
+using Order.Infrastructure.Repositories;
+using OrderFlow.Shared.Auth;
+using OrderFlow.Shared.Middleware;
+using OrderFlow.Shared.Swagger;
+using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
 
 namespace Order.Api;
 
@@ -6,34 +17,35 @@ public static class DependencyConfig
 {
     public static void ConfigureDependencies(this WebApplicationBuilder builder)
     {
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+        builder.Services.AddProblemDetails();
+
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new OpenApiInfo { Title = "Order API", Version = "v1" });
             options.AddServer(new OpenApiServer { Url = "/order" });
-            
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                In = ParameterLocation.Header,
-                Type = SecuritySchemeType.Http,
-                Scheme = "Bearer",
-                BearerFormat = "JWT",
-            });
-            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-            {
-                { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() },
-            });
+            options.AddBearerSecurity();
         });
+
+        builder.Services.AddHeaderAuthentication();
 
         builder.Services.AddStackExchangeRedisCache(options =>
             options.Configuration = builder.Configuration.GetConnectionString("Redis"));
 
-        // TODO: bind IOptions<T> sections via builder.Configuration.GetSection(...)
-        // TODO: register DbContext
-        // TODO: register repositories (interface -> implementation)
-        // TODO: register FluentValidation validators
-        // TODO: register application services
+        builder.Services.AddDbContext<OrderDbContext>(options =>
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+                sqlOptions => sqlOptions
+                    .MigrationsHistoryTable("__EFMigrationsHistory", "order")
+                    .EnableRetryOnFailure()));
+
+        builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+        builder.Services.AddScoped<IIdempotencyKeyRepository, IdempotencyKeyRepository>();
+        builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<IOrderService, OrderService>();
+
+        builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderRequestValidator>();
+        builder.Services.AddFluentValidationAutoValidation();
     }
 }
