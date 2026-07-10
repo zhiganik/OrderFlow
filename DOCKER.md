@@ -15,12 +15,14 @@ reverse-proxies to the three domain services.
 | `.env` (git-ignored) | Real, generated secrets used by `docker-compose.yml` at runtime. Never committed. |
 | `.env.example` (committed) | Template listing which secret keys exist, with empty values. Copy to `.env` and fill in (or run `make env`). |
 | `docker/servicebus/Config.json` | Defines the queues (`order-created`, `inventory-result`) the Azure Service Bus emulator creates on startup. |
-| `Makefile` | Shortcuts for the commands you'll run every day (`make up`, `make logs-order`, `make sql-shell`, ...). Run `make help` to list them. |
+| `Makefile` | Shortcuts for the commands you'll run every day (`make up`, `make logs-order`, `make sql-shell`, `make migrate-identity`, ...). Run `make help` to list them. |
 
 Code changes made alongside the infra:
-- `services/gateway/Gateway/Gateway.csproj` — added `Yarp.ReverseProxy`.
-- `services/gateway/Gateway/appsettings.json` — added a `ReverseProxy` section (routes + clusters).
-- `services/gateway/Gateway/DependencyConfig.cs` / `ApplicationConfig.cs` — wired up YARP, removed the auth TODOs (see [Gateway auth](#does-the-gateway-need-useauthenticationuseauthorization) below).
+- `services/gateway/Gateway/Gateway.csproj` — added `Yarp.ReverseProxy`, `Microsoft.AspNetCore.Authentication.JwtBearer`.
+- `services/gateway/Gateway/appsettings.json` — `ReverseProxy` section (routes + clusters + per-route `AuthorizationPolicy`) and a `Jwt` section.
+- `services/gateway/Gateway/DependencyConfig.cs` / `ApplicationConfig.cs` — JWT validation, YARP request transform for identity forwarding, Swagger dropdown (see [Gateway auth](#does-the-gateway-need-useauthenticationuseauthorization) below).
+- `services/identity/**` — full register/login/refresh/logout flow: `Identity.Application` (ASP.NET Core Identity's `ApplicationUser`, `AuthService`, `IRefreshTokenStore`), `Identity.Infrastructure` (`ApplicationIdentityDbContext`, `RedisRefreshTokenStore`, the `InitialIdentitySchema` migration), `Identity.Api` (`AuthController`, DI wiring).
+- `services/order/**`, `services/inventory/**` — one placeholder `[Authorize]`-free route each (`GET /orders`, `GET /inventory-items`) reading the gateway-forwarded `X-User-Id` header.
 - `services/{identity,order,inventory}/*.Api/*.csproj` + `DependencyConfig.cs` — added `Microsoft.Extensions.Caching.StackExchangeRedis` and registered `IDistributedCache` against the `Redis` connection string.
 
 ---
@@ -169,35 +171,97 @@ implementation, not just the Docker layer.
 
 ## Does the Gateway need `UseAuthentication()`/`UseAuthorization()`?
 
-No — and the TODOs for that were removed from `Gateway/ApplicationConfig.cs` and
-`DependencyConfig.cs`. Reasoning: `Identity.Api`, `Order.Api`, and `Inventory.Api`
-*already* each reference `Microsoft.AspNetCore.Authentication.JwtBearer` — that
-package reference predates this Docker work, meaning the architecture was already
-implicitly decided as **decentralized validation**: each domain service validates
-the JWT itself on every request, independent of how the request arrived. `Gateway`
-was never given a `JwtBearer` reference, which is the other half of that same
-decision.
+**Yes — this changed.** The section below originally argued for decentralized
+validation (each service validates its own JWT). After removing the published
+host ports on identity-api/order-api/inventory-api (see the last section), you
+asked for auth to be centralized at the Gateway instead, specifically to avoid
+repeating JWT config in three places. That's what's actually implemented now:
 
-Given that, YARP just forwards the `Authorization` header through unchanged (this
-is YARP's default behavior — it proxies request headers as-is unless you configure a
-transform to strip/change them), and the downstream service does the real check.
-Calling `app.UseAuthentication()` in the gateway with no `AddAuthentication()`
-configured wouldn't even be valid — there'd be no scheme registered for it to use.
+- **Gateway** (`Gateway/DependencyConfig.cs`): `AddAuthentication().AddJwtBearer(...)` +
+  `AddAuthorization()`. This is the *only* place `Jwt__SigningKey` is validated.
+- **`appsettings.json`'s `ReverseProxy.Routes`**: `order-route`/`inventory-route` carry
+  `"AuthorizationPolicy": "Default"` — YARP's built-in "require an authenticated user"
+  policy — so an invalid/missing token gets **401 straight from the gateway**, the
+  request never reaches `order-api`/`inventory-api` at all. `identity-route` has no
+  policy: register/login/refresh can't require a token you don't have yet.
+- **Gotcha we hit and fixed**: that blanket policy on `/order/{**catch-all}` also
+  caught `/order/swagger/**`, breaking the gateway's own Swagger dropdown (401 on the
+  spec fetch). Fixed with a more specific `order-swagger-route`/`inventory-swagger-route`
+  (`"Order": 0`, no auth policy) matched before the general routes (`"Order": 10`) —
+  YARP evaluates lower `Order` values first.
+- **Identity forwarding**: implemented as a YARP request transform
+  (`AddReverseProxy().AddTransforms(...)` in `Gateway/DependencyConfig.cs`), not a custom
+  ASP.NET Core middleware — this only runs for requests YARP actually proxies, rather
+  than every request the gateway receives, and it's the idiomatic place to mutate the
+  outgoing proxied request. It copies the validated `sub`/`email` claims onto
+  `X-User-Id`/`X-User-Email` on `transformContext.ProxyRequest`, after first stripping
+  any client-supplied values of those same headers (so a caller can never inject a fake
+  `X-User-Id` itself). `OrdersController`/`InventoryItemsController` just read
+  `Request.Headers["X-User-Id"]` — no JWT package, no `[Authorize]`, nothing auth-related
+  in either service at all anymore (the `JwtBearer` package was removed from both `.csproj`s).
 
-This *is* a real architectural choice with a trade-off, worth knowing explicitly
-rather than by accident:
-- **Decentralized (what you have):** each service is independently secure even if
-  something bypasses the gateway and hits it directly. Downside: the JWT validation
-  config (signing key, issuer, audience) is duplicated in three places.
-- **Centralized (gateway validates, forwards a trusted identity):** downstream
-  services get simpler (no JWT logic at all, just trust an internal header), but
-  they become *insecure if reachable directly* — the gateway becomes the only thing
-  standing between the internet and an unauthenticated request, so you'd need strict
-  network isolation (see the next section) to make that safe.
+The trade-off is the same one described below, just now the choice actually made:
+Order/Inventory are **fully unauthenticated if ever reached directly** — safe only
+because nothing but the gateway can reach them (`expose:`, not `ports:`). That's a
+real, common pattern (API gateway / BFF doing edge auth, internal services trusting
+the network), not a shortcut — but if this ever deploys somewhere the network
+guarantee is weaker (an Ingress accidentally pointed at a service directly, a shared
+VPC without a `NetworkPolicy`), those services would have zero protection of their
+own. Worth remembering if defense-in-depth ever becomes a requirement.
 
-Nothing about the current code needs to change to keep decentralized validation —
-that TODO removal just makes the intent explicit instead of leaving a misleading
-"do this later" marker on work that already lives elsewhere.
+## Validation: auto-validation instead of calling validators by hand
+
+`AuthController` used to inject `IValidator<RegisterRequest>`/`IValidator<LoginRequest>`
+and call `ValidateAsync` itself before doing anything — repeated in every action, easy
+to forget in a new one. Replaced with automatic validation:
+`SharpGrip.FluentValidation.AutoValidation.Mvc` (the community-maintained successor to
+`FluentValidation.AspNetCore`, which FluentValidation's own maintainers archived) plus
+one line in `Identity.Api/DependencyConfig.cs` —
+`builder.Services.AddFluentValidationAutoValidation();`. It hooks in as an MVC action
+filter: any FluentValidation validator already registered via
+`AddValidatorsFromAssemblyContaining<...>()` runs automatically against the matching
+action parameter before the action body executes, and a validation failure short-circuits
+straight to a `400 ValidationProblemDetails` — the controller action never runs at all.
+Verified: `POST /identity/register` with `{"email":"not-an-email","password":"short"}`
+returns 400 with per-field messages, with zero validation code in the controller.
+
+## Error handling: a Result type instead of try/catch in controllers
+
+`AuthService` used to throw a custom `AuthException` for expected failures (wrong
+password, expired refresh token, ...), which `AuthController` then had to catch in
+every single action just to turn it into the right status code — try/catch as
+boilerplate, repeated for something that isn't actually exceptional. Wrong
+credentials and an expired refresh token are normal, expected outcomes of calling
+those endpoints, not bugs — exceptions should be reserved for the unexpected
+(a downed database, a bug), which the framework already surfaces as a 500 with no
+extra code needed.
+
+Replaced with `Identity.Application/Dtos/AuthOutcome.cs`, a small `Succeeded`/`Result`/
+`Error` wrapper. `AuthService.RegisterAsync`/`LoginAsync`/`RefreshAsync` now return
+`Task<AuthOutcome>` and represent failure as data (`AuthOutcome.Failure("...")`)
+instead of throwing. `AuthController` just branches on `outcome.Succeeded` — no
+try/catch anywhere in the auth flow, and none needed: `UserManager.CreateAsync`/
+`CheckPasswordAsync`, `IRefreshTokenStore.GetUserIdAsync`, etc. already report expected
+failures as return values (`IdentityResult.Succeeded`, `false`, `null`) rather than
+exceptions, so there was never anything to catch in the first place once the outcome
+is threaded through properly.
+
+## Migrations are never applied automatically
+
+The first version of this called `dbContext.Database.Migrate()` at the top of
+`Identity.Api/ApplicationConfig.cs`, so every container start would silently apply any
+pending migration. **Removed** — auto-migrating on startup is a real production
+hazard (multiple replicas racing to migrate simultaneously, an untested schema change
+shipping the moment a container restarts, no review gate between "merged" and
+"applied to the database"), not just a local-dev nicety to skip.
+
+Migrations are now a deliberate, manual step: `make migrate-identity` runs
+`dotnet ef database update` from your host machine against the SQL Server container's
+published port (`localhost,1433`), using the same `IdentityDb` + `sa` credentials the
+container itself uses. Verified: on a fresh `make down-v && make up`, `POST
+/identity/register` fails with a SQL "Cannot open database" error (no `AspNetUsers`
+table exists yet); running `make migrate-identity` fixes it, and register/login work
+immediately after with no container restart needed.
 
 ## Is `appsettings.json` the right place for the `ReverseProxy` config?
 

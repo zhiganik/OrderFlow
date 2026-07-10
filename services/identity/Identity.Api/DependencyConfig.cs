@@ -1,21 +1,65 @@
+using FluentValidation;
+using Identity.Api.Middleware;
+using Identity.Application.Domain;
+using Identity.Application.Dtos;
+using Identity.Application.Interfaces;
+using Identity.Application.Services;
+using Identity.Application.Validators;
+using Identity.Infrastructure.Persistence;
+using Identity.Infrastructure.Repositories;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
+using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
+
 namespace Identity.Api;
 
 public static class DependencyConfig
 {
     public static void ConfigureDependencies(this WebApplicationBuilder builder)
     {
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+        builder.Services.AddProblemDetails();
+
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen(/* add JWT security definition here later */);
 
         builder.Services.AddStackExchangeRedisCache(options =>
             options.Configuration = builder.Configuration.GetConnectionString("Redis"));
 
-        // TODO: bind IOptions<T> sections via builder.Configuration.GetSection(...)
-        // TODO: register DbContext
-        // TODO: register repositories (interface -> implementation)
-        // TODO: register FluentValidation validators
-        // TODO: register JWT authentication + authorization
-        // TODO: register application services
+        builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+
+        builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+        builder.Services.AddDataProtection();
+        builder.Services.AddIdentityCore<ApplicationUser>()
+            .AddEntityFrameworkStores<ApplicationIdentityDbContext>()
+            .AddDefaultTokenProviders();
+
+        builder.Services.AddScoped<IRefreshTokenStore, RedisRefreshTokenStore>();
+        builder.Services.AddScoped<IAuthService, AuthService>();
+
+        builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
+        builder.Services.AddFluentValidationAutoValidation();
+
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v1", new OpenApiInfo { Title = "Identity API", Version = "v1" });
+            options.AddServer(new OpenApiServer { Url = "/identity" });
+            
+            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                In = ParameterLocation.Header,
+                Type = SecuritySchemeType.Http,
+                Scheme = "Bearer",
+                BearerFormat = "JWT",
+            });
+            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+            {
+                { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() },
+            });
+        });
     }
 }

@@ -140,6 +140,7 @@ services:
       dockerfile: services/gateway/Gateway/Dockerfile
     container_name: orderflow-gateway
     environment:
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     ports:
       - "8080:8080"

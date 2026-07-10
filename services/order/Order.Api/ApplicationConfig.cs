@@ -12,9 +12,6 @@ public static class ApplicationConfig
 
         app.UseHttpsRedirection();
 
-        // TODO: app.UseAuthentication();
-        // TODO: app.UseAuthorization();
-
         app.MapControllers();
     }
 }
