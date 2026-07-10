@@ -9,6 +9,7 @@
     <ItemGroup>
       <ProjectReference Include="..\Identity.Application\Identity.Application.csproj" />
       <ProjectReference Include="..\Identity.Infrastructure\Identity.Infrastructure.csproj" />
+      <ProjectReference Include="..\..\shared\OrderFlow.Shared\OrderFlow.Shared.csproj" />
     </ItemGroup>
 
     <ItemGroup>

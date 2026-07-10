@@ -1,8 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
-using Gateway.Middleware;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using OrderFlow.Shared.Auth;
+using OrderFlow.Shared.Middleware;
+using OrderFlow.Shared.Swagger;
 using Yarp.ReverseProxy.Transforms;
 
 namespace Gateway;
@@ -17,21 +20,7 @@ public static class DependencyConfig
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
 
-        builder.Services.AddSwaggerGen(options =>
-        {
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                In = ParameterLocation.Header,
-                Type = SecuritySchemeType.Http,
-                Scheme = "Bearer",
-                BearerFormat = "JWT",
-            });
-            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-            {
-                { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() },
-            });
-        });
+        builder.Services.AddSwaggerGen(options => options.AddBearerSecurity());
 
         var jwtSection = builder.Configuration.GetSection("Jwt");
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -57,23 +46,30 @@ public static class DependencyConfig
             {
                 context.AddRequestTransform(transformContext =>
                 {
-                    transformContext.ProxyRequest.Headers.Remove("X-User-Id");
-                    transformContext.ProxyRequest.Headers.Remove("X-User-Email");
+                    transformContext.ProxyRequest.Headers.Remove(ForwardedHeaders.UserId);
+                    transformContext.ProxyRequest.Headers.Remove(ForwardedHeaders.UserEmail);
+                    transformContext.ProxyRequest.Headers.Remove(ForwardedHeaders.UserRoles);
 
                     var user = transformContext.HttpContext.User;
                     if (user.Identity?.IsAuthenticated == true)
                     {
                         var userId = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
                         var email = user.FindFirst(JwtRegisteredClaimNames.Email)?.Value;
+                        var roles = string.Join(',', user.FindAll(ClaimTypes.Role).Select(c => c.Value));
 
                         if (!string.IsNullOrEmpty(userId))
                         {
-                            transformContext.ProxyRequest.Headers.Add("X-User-Id", userId);
+                            transformContext.ProxyRequest.Headers.Add(ForwardedHeaders.UserId, userId);
                         }
 
                         if (!string.IsNullOrEmpty(email))
                         {
-                            transformContext.ProxyRequest.Headers.Add("X-User-Email", email);
+                            transformContext.ProxyRequest.Headers.Add(ForwardedHeaders.UserEmail, email);
+                        }
+
+                        if (!string.IsNullOrEmpty(roles))
+                        {
+                            transformContext.ProxyRequest.Headers.Add(ForwardedHeaders.UserRoles, roles);
                         }
                     }
 

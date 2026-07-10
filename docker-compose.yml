@@ -67,8 +67,9 @@ services:
       context: .
       dockerfile: services/identity/Identity.Api/Dockerfile
     container_name: orderflow-identity-api
+    restart: unless-stopped
     environment:
-      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=IdentityDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
@@ -89,8 +90,9 @@ services:
       context: .
       dockerfile: services/order/Order.Api/Dockerfile
     container_name: orderflow-order-api
+    restart: unless-stopped
     environment:
-      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
@@ -114,8 +116,9 @@ services:
       context: .
       dockerfile: services/inventory/Inventory.Api/Dockerfile
     container_name: orderflow-inventory-api
+    restart: unless-stopped
     environment:
-      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=InventoryDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
@@ -139,6 +142,7 @@ services:
       context: .
       dockerfile: services/gateway/Gateway/Dockerfile
     container_name: orderflow-gateway
+    restart: unless-stopped
     environment:
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development

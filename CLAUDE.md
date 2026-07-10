@@ -37,6 +37,18 @@ contracts/OrderFlow.Contracts holds only cross-service event DTOs
 domain logic. Referenced by Application layer (not Infrastructure) since deciding
 to raise an event is a business decision.
 
+## Shared project
+services/shared/OrderFlow.Shared holds cross-service Api-layer plumbing that
+would otherwise be duplicated verbatim: GlobalExceptionHandler, the Swagger
+Bearer-scheme setup, and header-based auth (AuthPolicies, ForwardedHeaders,
+HeaderAuthenticationHandler, ICurrentUser). Reference direction: **Api ->
+Shared only** — Application and Infrastructure never reference it, and Shared
+never references any service project. Gateway does real JWT bearer auth and
+forwards X-User-Id/X-User-Email/X-User-Roles downstream; Order/Inventory Apis
+trust those headers via Shared's HeaderAuthenticationHandler and use plain
+[Authorize]/[Authorize(Policy = AuthPolicies.Admin)] instead of parsing
+headers by hand.
+
 ## Repository pattern
 IRepository interfaces live in Application/Interfaces/, implementations in
 Infrastructure/Repositories/. Each repository exposes only the queries its service

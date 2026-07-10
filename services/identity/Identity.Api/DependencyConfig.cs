@@ -1,5 +1,5 @@
 using FluentValidation;
-using Identity.Api.Middleware;
+using Identity.Api.Startup;
 using Identity.Application.Domain;
 using Identity.Application.Dtos;
 using Identity.Application.Interfaces;
@@ -10,6 +10,8 @@ using Identity.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using OrderFlow.Shared.Middleware;
+using OrderFlow.Shared.Swagger;
 using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
 
 namespace Identity.Api;
@@ -30,15 +32,20 @@ public static class DependencyConfig
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
         builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+                sqlOptions => sqlOptions
+                    .MigrationsHistoryTable("__EFMigrationsHistory", "identity")
+                    .EnableRetryOnFailure()));
 
         builder.Services.AddDataProtection();
         builder.Services.AddIdentityCore<ApplicationUser>()
+            .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationIdentityDbContext>()
             .AddDefaultTokenProviders();
 
         builder.Services.AddScoped<IRefreshTokenStore, RedisRefreshTokenStore>();
         builder.Services.AddScoped<IAuthService, AuthService>();
+        builder.Services.AddHostedService<RoleSeeder>();
 
         builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
         builder.Services.AddFluentValidationAutoValidation();
@@ -47,19 +54,7 @@ public static class DependencyConfig
         {
             options.SwaggerDoc("v1", new OpenApiInfo { Title = "Identity API", Version = "v1" });
             options.AddServer(new OpenApiServer { Url = "/identity" });
-            
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                In = ParameterLocation.Header,
-                Type = SecuritySchemeType.Http,
-                Scheme = "Bearer",
-                BearerFormat = "JWT",
-            });
-            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-            {
-                { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() },
-            });
+            options.AddBearerSecurity();
         });
     }
 }

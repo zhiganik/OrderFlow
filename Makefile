@@ -26,7 +26,7 @@ COMPOSE := docker compose
 
 .PHONY: help env build up down down-v restart rebuild ps logs \
         logs-gateway logs-identity logs-order logs-inventory logs-sqlserver logs-sb \
-        sql-shell redis-cli sb-logs clean prune migrate-identity
+        sql-shell redis-cli sb-logs clean prune migrate-identity migrate-order
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -89,8 +89,15 @@ prune: ## Remove dangling images/build cache (careful: affects other projects' c
 	docker builder prune -f
 
 migrate-identity: ## Apply pending Identity EF Core migrations (manual step, never automatic)
-	ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=IdentityDb;User Id=sa;Password=$(MSSQL_SA_PASSWORD);TrustServerCertificate=True" \
+	ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=OrderFlowDb;User Id=sa;Password=$(MSSQL_SA_PASSWORD);TrustServerCertificate=True" \
 	dotnet ef database update \
 		--project services/identity/Identity.Infrastructure/Identity.Infrastructure.csproj \
 		--startup-project services/identity/Identity.Api/Identity.Api.csproj \
 		--context Identity.Infrastructure.Persistence.ApplicationIdentityDbContext
+
+migrate-order: ## Apply pending Order EF Core migrations (manual step, never automatic)
+	ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=OrderFlowDb;User Id=sa;Password=$(MSSQL_SA_PASSWORD);TrustServerCertificate=True" \
+	dotnet ef database update \
+		--project services/order/Order.Infrastructure/Order.Infrastructure.csproj \
+		--startup-project services/order/Order.Api/Order.Api.csproj \
+		--context Order.Infrastructure.Persistence.OrderDbContext
