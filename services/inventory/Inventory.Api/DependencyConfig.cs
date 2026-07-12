@@ -1,9 +1,18 @@
+using FluentValidation;
 using Inventory.Application.Dtos;
+using Inventory.Application.Interfaces;
+using Inventory.Application.Services;
+using Inventory.Application.Validators;
 using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Repositories;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using OrderFlow.Shared.Auth;
+using OrderFlow.Shared.Middleware;
+using OrderFlow.Shared.Swagger;
+using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
 
 namespace Inventory.Api;
 
@@ -11,26 +20,19 @@ public static class DependencyConfig
 {
     public static void ConfigureDependencies(this WebApplicationBuilder builder)
     {
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+        builder.Services.AddProblemDetails();
+
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new OpenApiInfo { Title = "Inventory API", Version = "v1" });
             options.AddServer(new OpenApiServer { Url = "/inventory" });
-            
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                In = ParameterLocation.Header,
-                Type = SecuritySchemeType.Http,
-                Scheme = "Bearer",
-                BearerFormat = "JWT",
-            });
-            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-            {
-                { new OpenApiSecuritySchemeReference("Bearer", document), new List<string>() },
-            });
+            options.AddBearerSecurity();
         });
+
+        builder.Services.AddHeaderAuthentication();
 
         builder.Services.AddStackExchangeRedisCache(options =>
             options.Configuration = builder.Configuration.GetConnectionString("Redis"));
@@ -58,8 +60,11 @@ public static class DependencyConfig
             });
         });
 
-        // TODO: register repositories (interface -> implementation)
-        // TODO: register FluentValidation validators
-        // TODO: register application services
+        builder.Services.AddScoped<IStockItemRepository, StockItemRepository>();
+        builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<IStockService, StockService>();
+
+        builder.Services.AddValidatorsFromAssemblyContaining<UpsertStockItemRequestValidator>();
+        builder.Services.AddFluentValidationAutoValidation();
     }
 }
