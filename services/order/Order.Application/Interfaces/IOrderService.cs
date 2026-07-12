@@ -1,4 +1,5 @@
 using Order.Application.Dtos;
+using OrderFlow.Shared.Common;
 
 namespace Order.Application.Interfaces;
 
@@ -10,9 +11,16 @@ public interface IOrderService
         string idempotencyKey,
         CancellationToken cancellationToken = default);
 
-    Task<List<OrderResponse>> GetOrdersByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default);
+    Task<PagedResult<OrderResponse>> GetOrdersByCustomerAsync(
+        Guid customerId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 
-    Task<List<OrderResponse>> GetAllOrdersAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<OrderResponse>> GetAllOrdersAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 
     Task<OrderResponse?> GetOrderByIdAsync(Guid orderId, CancellationToken cancellationToken = default);
 }

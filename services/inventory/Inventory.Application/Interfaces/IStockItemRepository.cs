@@ -8,5 +8,10 @@ public interface IStockItemRepository
 
     Task<StockItem?> FindByProductNameAsync(string productName, CancellationToken cancellationToken = default);
 
-    Task<List<StockItem>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<(List<StockItem> Items, int TotalCount)> SearchAsync(
+        int page,
+        int pageSize,
+        Guid? id,
+        string? productName,
+        CancellationToken cancellationToken = default);
 }

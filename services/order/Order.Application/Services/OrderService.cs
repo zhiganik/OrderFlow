@@ -4,6 +4,7 @@ using System.Text.Json;
 using Order.Application.Domain;
 using Order.Application.Dtos;
 using Order.Application.Interfaces;
+using OrderFlow.Shared.Common;
 
 namespace Order.Application.Services;
 
@@ -54,16 +55,43 @@ public class OrderService(
         return new CreateOrderResult { Outcome = CreateOrderOutcome.Created, StatusCode = 201, Order = response };
     }
 
-    public async Task<List<OrderResponse>> GetOrdersByCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<OrderResponse>> GetOrdersByCustomerAsync(
+        Guid customerId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
-        var orders = await orderRepository.GetByCustomerIdAsync(customerId, cancellationToken);
-        return orders.Select(ToResponse).ToList();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (orders, totalCount) = await orderRepository.GetPagedByCustomerIdAsync(customerId, page, pageSize, cancellationToken);
+
+        return new PagedResult<OrderResponse>
+        {
+            Items = orders.Select(ToResponse).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
     }
 
-    public async Task<List<OrderResponse>> GetAllOrdersAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedResult<OrderResponse>> GetAllOrdersAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
-        var orders = await orderRepository.GetAllAsync(cancellationToken);
-        return orders.Select(ToResponse).ToList();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (orders, totalCount) = await orderRepository.GetAllPagedAsync(page, pageSize, cancellationToken);
+
+        return new PagedResult<OrderResponse>
+        {
+            Items = orders.Select(ToResponse).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
     }
 
     public async Task<OrderResponse?> GetOrderByIdAsync(Guid orderId, CancellationToken cancellationToken = default)

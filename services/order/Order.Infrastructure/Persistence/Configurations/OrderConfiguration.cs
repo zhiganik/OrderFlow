@@ -16,7 +16,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<OrderEntity>
             .HasMaxLength(20)
             .IsRequired();
 
-        builder.HasIndex(o => o.CustomerId);
+        builder.HasIndex(o => new { o.CustomerId, o.CreatedAt });
+        builder.HasIndex(o => o.CreatedAt);
 
         builder.HasMany(o => o.Items)
             .WithOne()

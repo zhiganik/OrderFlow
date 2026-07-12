@@ -11,10 +11,15 @@ namespace Inventory.Api.Controllers;
 public class StockController(IStockService stockService) : ControllerBase
 {
     [HttpGet("api/stock")]
-    public async Task<IActionResult> GetStock(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetStock(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] Guid? id = null,
+        [FromQuery] string? productName = null,
+        CancellationToken cancellationToken = default)
     {
-        var stockItems = await stockService.GetAllAsync(cancellationToken);
-        return Ok(stockItems);
+        var result = await stockService.SearchAsync(page, pageSize, id, productName, cancellationToken);
+        return Ok(result);
     }
 
     [HttpPost("api/stock")]

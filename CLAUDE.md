@@ -44,8 +44,12 @@ services/shared/OrderFlow.Shared holds cross-service Api-layer plumbing that
 would otherwise be duplicated verbatim: GlobalExceptionHandler, the Swagger
 Bearer-scheme setup, and header-based auth (AuthPolicies, ForwardedHeaders,
 HeaderAuthenticationHandler, ICurrentUser). Reference direction: **Api ->
-Shared only** — Application and Infrastructure never reference it, and Shared
-never references any service project. Gateway does real JWT bearer auth and
+Shared** for that plumbing, and **Application -> Shared** additionally for
+plain, framework-free shared types under `Common/` (e.g. `PagedResult<T>`)
+that Application-layer services need to return. Infrastructure never
+references Shared — repositories return plain tuples/lists, and Application
+wraps them into `Common/` types. Shared never references any service
+project. Gateway does real JWT bearer auth and
 forwards X-User-Id/X-User-Email/X-User-Roles downstream; Order/Inventory Apis
 trust those headers via Shared's HeaderAuthenticationHandler and use plain
 [Authorize]/[Authorize(Policy = AuthPolicies.Admin)] instead of parsing

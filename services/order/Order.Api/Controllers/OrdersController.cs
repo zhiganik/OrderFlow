@@ -12,11 +12,14 @@ namespace Order.Api.Controllers;
 public class OrdersController(IOrderService orderService, ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet("orders")]
-    public async Task<IActionResult> GetOrders(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetOrders(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var orders = currentUser.IsAdmin
-            ? await orderService.GetAllOrdersAsync(cancellationToken)
-            : await orderService.GetOrdersByCustomerAsync(currentUser.UserId, cancellationToken);
+            ? await orderService.GetAllOrdersAsync(page, pageSize, cancellationToken)
+            : await orderService.GetOrdersByCustomerAsync(currentUser.UserId, page, pageSize, cancellationToken);
 
         return Ok(orders);
     }

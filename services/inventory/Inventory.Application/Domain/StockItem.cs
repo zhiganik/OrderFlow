@@ -5,6 +5,7 @@ public class StockItem
     public Guid Id { get; private set; }
     public string ProductName { get; private set; } = string.Empty;
     public int QuantityAvailable { get; private set; }
+    public DateTime CreatedAt { get; private set; }
 
     private StockItem()
     {
@@ -27,6 +28,7 @@ public class StockItem
             Id = Guid.NewGuid(),
             ProductName = productName,
             QuantityAvailable = quantityAvailable,
+            CreatedAt = DateTime.UtcNow,
         };
     }
 

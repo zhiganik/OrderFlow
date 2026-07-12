@@ -16,5 +16,6 @@ public class StockItemConfiguration : IEntityTypeConfiguration<StockItem>
             .IsRequired();
 
         builder.HasIndex(s => s.ProductName).IsUnique();
+        builder.HasIndex(s => s.CreatedAt);
     }
 }

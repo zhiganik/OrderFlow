@@ -1,6 +1,7 @@
 using Inventory.Application.Domain;
 using Inventory.Application.Dtos;
 using Inventory.Application.Interfaces;
+using OrderFlow.Shared.Common;
 
 namespace Inventory.Application.Services;
 
@@ -8,10 +9,25 @@ public class StockService(
     IStockItemRepository stockItemRepository,
     IUnitOfWork unitOfWork) : IStockService
 {
-    public async Task<List<StockItemResponse>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedResult<StockItemResponse>> SearchAsync(
+        int page,
+        int pageSize,
+        Guid? id,
+        string? productName,
+        CancellationToken cancellationToken = default)
     {
-        var stockItems = await stockItemRepository.GetAllAsync(cancellationToken);
-        return stockItems.Select(ToResponse).ToList();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (items, totalCount) = await stockItemRepository.SearchAsync(page, pageSize, id, productName, cancellationToken);
+
+        return new PagedResult<StockItemResponse>
+        {
+            Items = items.Select(ToResponse).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+        };
     }
 
     public async Task<StockItemResponse> UpsertAsync(UpsertStockItemRequest request, CancellationToken cancellationToken = default)
@@ -37,5 +53,6 @@ public class StockService(
         Id = stockItem.Id,
         ProductName = stockItem.ProductName,
         QuantityAvailable = stockItem.QuantityAvailable,
+        CreatedAt = stockItem.CreatedAt,
     };
 }
