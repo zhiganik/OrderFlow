@@ -18,28 +18,21 @@ services:
     networks:
       - orderflow
 
-  sqledge:
-    image: mcr.microsoft.com/azure-sql-edge:latest
-    container_name: orderflow-sqledge
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: orderflow-rabbitmq
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
-    networks:
-      - orderflow
-
-  sb-emulator:
-    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
-    container_name: orderflow-sb-emulator
-    environment:
-      ACCEPT_EULA: ${SERVICEBUS_ACCEPT_EULA}
-      SQL_SERVER: sqledge
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
-    volumes:
-      - ./docker/servicebus/Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
-    depends_on:
-      - sqledge
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     networks:
       - orderflow
 
@@ -94,7 +87,9 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
-      ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     # No `ports:` — only reachable from other containers on the `orderflow` network
@@ -106,8 +101,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      sb-emulator:
-        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - orderflow
 
@@ -120,7 +115,9 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
-      ServiceBus__ConnectionString: "Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD}
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     # No `ports:` — only reachable from other containers on the `orderflow` network
@@ -132,8 +129,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      sb-emulator:
-        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - orderflow
 

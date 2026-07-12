@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MassTransit;
+using Microsoft.Extensions.Logging;
 using Order.Application.Domain;
 using Order.Application.Dtos;
 using Order.Application.Interfaces;
+using OrderFlow.Contracts;
 using OrderFlow.Shared.Common;
 
 namespace Order.Application.Services;
@@ -11,7 +14,9 @@ namespace Order.Application.Services;
 public class OrderService(
     IOrderRepository orderRepository,
     IIdempotencyKeyRepository idempotencyKeyRepository,
-    IUnitOfWork unitOfWork) : IOrderService
+    IUnitOfWork unitOfWork,
+    IPublishEndpoint publishEndpoint,
+    ILogger<OrderService> logger) : IOrderService
 {
     public async Task<CreateOrderResult> CreateOrderAsync(
         CreateOrderRequest request,
@@ -49,6 +54,14 @@ public class OrderService(
             ResponseBody = JsonSerializer.Serialize(response),
             CreatedAt = order.CreatedAt,
         });
+
+        await publishEndpoint.Publish(
+            new OrderCreatedEvent(
+                order.Id,
+                order.CustomerId,
+                order.Items.Select(i => new OrderCreatedItem(i.ProductName, i.Quantity)).ToList(),
+                order.CreatedAt),
+            cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -100,11 +113,38 @@ public class OrderService(
         return order is null ? null : ToResponse(order);
     }
 
+    public async Task MarkReservedAsync(Guid orderId, CancellationToken cancellationToken = default)
+    {
+        var order = await orderRepository.FindByIdAsync(orderId, cancellationToken);
+        if (order is null)
+        {
+            logger.LogWarning("Received InventoryReservedEvent for unknown order {OrderId}", orderId);
+            return;
+        }
+
+        order.MarkReserved();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MarkRejectedAsync(Guid orderId, string reason, CancellationToken cancellationToken = default)
+    {
+        var order = await orderRepository.FindByIdAsync(orderId, cancellationToken);
+        if (order is null)
+        {
+            logger.LogWarning("Received InventoryRejectedEvent for unknown order {OrderId}", orderId);
+            return;
+        }
+
+        order.MarkRejected(reason);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
     private static OrderResponse ToResponse(OrderEntity order) => new()
     {
         Id = order.Id,
         CustomerId = order.CustomerId,
         Status = order.Status.ToString(),
+        RejectionReason = order.RejectionReason,
         CreatedAt = order.CreatedAt,
         UpdatedAt = order.UpdatedAt,
         Items = order.Items.Select(i => new OrderItemResponse

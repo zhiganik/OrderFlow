@@ -5,6 +5,7 @@ public class Order
     public Guid Id { get; private set; }
     public Guid CustomerId { get; private set; }
     public OrderStatus Status { get; private set; }
+    public string? RejectionReason { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public List<OrderItem> Items { get; private set; } = [];
@@ -33,5 +34,18 @@ public class Order
         order.Items = items.Select(item => OrderItem.Create(order.Id, item.ProductName, item.Quantity)).ToList();
 
         return order;
+    }
+
+    public void MarkReserved()
+    {
+        Status = OrderStatus.Reserved;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkRejected(string reason)
+    {
+        Status = OrderStatus.Rejected;
+        RejectionReason = reason;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

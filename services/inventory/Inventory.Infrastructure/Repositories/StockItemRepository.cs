@@ -12,6 +12,9 @@ public class StockItemRepository(InventoryDbContext context) : IStockItemReposit
     public async Task<StockItem?> FindByProductNameAsync(string productName, CancellationToken cancellationToken = default) =>
         await context.StockItems.FirstOrDefaultAsync(s => s.ProductName == productName, cancellationToken);
 
+    public async Task<List<StockItem>> FindByProductNamesAsync(IEnumerable<string> productNames, CancellationToken cancellationToken = default) =>
+        await context.StockItems.Where(s => productNames.Contains(s.ProductName)).ToListAsync(cancellationToken);
+
     public async Task<(List<StockItem> Items, int TotalCount)> SearchAsync(
         int page,
         int pageSize,

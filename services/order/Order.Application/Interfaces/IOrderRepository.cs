@@ -18,4 +18,6 @@ public interface IOrderRepository
         CancellationToken cancellationToken = default);
 
     Task<OrderEntity?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default);
+
+    Task<OrderEntity?> FindByIdAsync(Guid orderId, CancellationToken cancellationToken = default);
 }

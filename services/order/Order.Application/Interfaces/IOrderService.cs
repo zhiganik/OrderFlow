@@ -23,4 +23,8 @@ public interface IOrderService
         CancellationToken cancellationToken = default);
 
     Task<OrderResponse?> GetOrderByIdAsync(Guid orderId, CancellationToken cancellationToken = default);
+
+    Task MarkReservedAsync(Guid orderId, CancellationToken cancellationToken = default);
+
+    Task MarkRejectedAsync(Guid orderId, string reason, CancellationToken cancellationToken = default);
 }

@@ -52,4 +52,7 @@ public class OrderRepository(OrderDbContext context) : IOrderRepository
             .AsNoTracking()
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+
+    public async Task<OrderEntity?> FindByIdAsync(Guid orderId, CancellationToken cancellationToken = default) =>
+        await context.Orders.FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
 }

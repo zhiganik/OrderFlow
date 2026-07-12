@@ -8,6 +8,8 @@ public interface IStockItemRepository
 
     Task<StockItem?> FindByProductNameAsync(string productName, CancellationToken cancellationToken = default);
 
+    Task<List<StockItem>> FindByProductNamesAsync(IEnumerable<string> productNames, CancellationToken cancellationToken = default);
+
     Task<(List<StockItem> Items, int TotalCount)> SearchAsync(
         int page,
         int pageSize,

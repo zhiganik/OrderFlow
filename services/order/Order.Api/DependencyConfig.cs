@@ -7,6 +7,7 @@ using Order.Application.Dtos;
 using Order.Application.Interfaces;
 using Order.Application.Services;
 using Order.Application.Validators;
+using Order.Infrastructure.Messaging;
 using Order.Infrastructure.Persistence;
 using Order.Infrastructure.Repositories;
 using OrderFlow.Shared.Auth;
@@ -52,6 +53,7 @@ public static class DependencyConfig
         builder.Services.AddFluentValidationAutoValidation();
 
         builder.Services.Configure<ServiceBusOptions>(builder.Configuration.GetSection("ServiceBus"));
+        builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection("RabbitMq"));
 
         builder.Services.AddMassTransit(x =>
         {
@@ -61,11 +63,35 @@ public static class DependencyConfig
                 o.UseBusOutbox();
             });
 
-            x.UsingAzureServiceBus((context, cfg) =>
+            x.AddConsumer<InventoryReservedConsumer>();
+            x.AddConsumer<InventoryRejectedConsumer>();
+
+            x.AddConfigureEndpointsCallback((context, _, cfg) => cfg.UseEntityFrameworkOutbox<OrderDbContext>(context));
+
+            if (builder.Environment.IsDevelopment())
             {
-                var serviceBusOptions = context.GetRequiredService<IOptions<ServiceBusOptions>>().Value;
-                cfg.Host(serviceBusOptions.ConnectionString);
-            });
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var rabbitMqOptions = context.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+                    cfg.Host(rabbitMqOptions.Host, "/", h =>
+                    {
+                        h.Username(rabbitMqOptions.Username);
+                        h.Password(rabbitMqOptions.Password);
+                    });
+
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
+            else
+            {
+                x.UsingAzureServiceBus((context, cfg) =>
+                {
+                    var serviceBusOptions = context.GetRequiredService<IOptions<ServiceBusOptions>>().Value;
+                    cfg.Host(serviceBusOptions.ConnectionString);
+
+                    cfg.ConfigureEndpoints(context);
+                });
+            }
         });
     }
 }

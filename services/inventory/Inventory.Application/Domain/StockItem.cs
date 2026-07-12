@@ -41,4 +41,14 @@ public class StockItem
 
         QuantityAvailable = quantityAvailable;
     }
+
+    public void Reserve(int quantity)
+    {
+        if (quantity > QuantityAvailable)
+        {
+            throw new InvalidOperationException($"Cannot reserve {quantity} of '{ProductName}' — only {QuantityAvailable} available.");
+        }
+
+        QuantityAvailable -= quantity;
+    }
 }

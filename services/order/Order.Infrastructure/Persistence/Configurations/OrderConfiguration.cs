@@ -16,6 +16,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<OrderEntity>
             .HasMaxLength(20)
             .IsRequired();
 
+        builder.Property(o => o.RejectionReason)
+            .HasMaxLength(500);
+
         builder.HasIndex(o => new { o.CustomerId, o.CreatedAt });
         builder.HasIndex(o => o.CreatedAt);
 

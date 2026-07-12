@@ -1,7 +1,7 @@
 # Local Docker environment — what was built and why
 
 This documents the local Docker setup added to the repo: one container per service,
-a shared SQL Server, an Azure Service Bus emulator, Redis, and a Gateway that
+a shared SQL Server, RabbitMQ, Redis, and a Gateway that
 reverse-proxies to the three domain services.
 
 ## File-by-file manifest
@@ -10,11 +10,10 @@ reverse-proxies to the three domain services.
 |---|---|
 | `services/{identity,order,inventory}/*.Api/Dockerfile` | Builds one image per API project. |
 | `services/gateway/Gateway/Dockerfile` | Builds the Gateway image. |
-| `docker-compose.yml` | Orchestrates all 8 containers, the network, and the volumes. |
+| `docker-compose.yml` | Orchestrates all 7 containers, the network, and the volumes. |
 | `.dockerignore` | Keeps `bin/`, `obj/`, `.git/` etc. out of the build context sent to the Docker daemon. |
 | `.env` (git-ignored) | Real, generated secrets used by `docker-compose.yml` at runtime. Never committed. |
 | `.env.example` (committed) | Template listing which secret keys exist, with empty values. Copy to `.env` and fill in (or run `make env`). |
-| `docker/servicebus/Config.json` | Defines the queues (`order-created`, `inventory-result`) the Azure Service Bus emulator creates on startup. |
 | `Makefile` | Shortcuts for the commands you'll run every day (`make up`, `make logs-order`, `make sql-shell`, `make migrate-identity`, ...). Run `make help` to list them. |
 
 Code changes made alongside the infra:
@@ -80,7 +79,7 @@ different host ports (8080/8081/8082/8083) so they don't collide on your machine
 **Networking.** `docker-compose.yml` declares one bridge network (`orderflow`) and
 every service joins it. Compose gives each container a DNS entry equal to its
 service name — that's why `order-api`'s connection string can say `Server=sqlserver`
-and `ServiceBus__ConnectionString` can say `Endpoint=sb://sb-emulator`: those
+and `RabbitMq__Host` can say `rabbitmq`: those
 hostnames only resolve *inside* that Docker network, not from your host machine
 (hence `Server=sqlserver` in the container env, but `localhost:1433` if you connect
 from a SQL client running on Windows directly, since `1433:1433` is also published
@@ -95,18 +94,6 @@ ready to accept connections, and API containers crash-looping on startup if they
 try to connect too early is the classic failure mode this avoids.
 
 ---
-
-## What is Azure SQL Edge, and why is it here if the app uses SQL Server?
-
-`sqledge` isn't used by Identity/Order/Inventory — it exists purely as a dependency
-of `sb-emulator`. The Azure Service Bus emulator needs somewhere to durably store
-its internal state (queues, messages, delivery counts) and Microsoft's official
-emulator image is built to use a SQL Server–compatible engine for that, pointed at
-via the `SQL_SERVER` env var. Azure SQL Edge is Microsoft's lightweight,
-multi-architecture (works on ARM too, e.g. Apple Silicon) SQL Server–compatible
-engine, and it's what Microsoft's own emulator docs use as that companion
-database. You will never connect to `sqledge` yourself — it's private plumbing for
-`sb-emulator`, which is why it has no `ports:` mapping to the host.
 
 ## The `sa` user — does this create a new user?
 
@@ -127,45 +114,28 @@ scoped to only that service's database (`CREATE LOGIN order_svc ...` +
 work in `DependencyConfig.cs`'s TODOs actually lands, not something this Docker setup
 needed to solve.
 
-## How the Azure Service Bus emulator works
+## Why RabbitMQ locally, when Azure Service Bus is still in the code
 
-It's a real (scaled-down) implementation of the Service Bus protocol running
-locally, not a mock — your app talks to it with the exact same
-`Azure.Messaging.ServiceBus` SDK and connection-string shape it would use against
-real Azure. Three moving parts:
+This repo originally ran the Azure Service Bus emulator locally, matching the
+real target transport (`MassTransit.Azure.ServiceBus.Core`). That was reverted:
+**MassTransit 8.x (the free/current major version) cannot work with the emulator
+at all.** Confirmed by reading MassTransit's actual source
+(`ServiceBusReceiveEndpointConfiguration.Build()` in
+`MassTransit.Azure.ServiceBus.Core`) — every receive endpoint unconditionally
+calls the Service Bus *admin* client (`GetQueueAsync`/`CreateQueueAsync`) before
+it ever does plain AMQP send/receive, and the emulator doesn't support admin
+operations under MassTransit 8 (that only shipped in the paid v9). No
+configuration flag skips this — it isn't a topology-provisioning nuance to work
+around, it's a hard wall for any consumer, on any queue, against the emulator.
 
-1. **`docker/servicebus/Config.json`** — declares the namespace and its queues
-   (`order-created`, `inventory-result`) up front. Unlike real Azure, you can't
-   create queues via API calls at runtime against the emulator in this setup — they
-   must exist in this file before the container starts (you saw this in the logs:
-   `Creating queue: order-created` / `inventory-result` at boot).
-2. **`sqledge`** — where the emulator persists queue/message state (see above).
-3. **The well-known dev connection string** —
-   `Endpoint=sb://sb-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;`.
-   `SAS_KEY_VALUE` is a literal placeholder string, not a real secret — the emulator
-   doesn't check it, `UseDevelopmentEmulator=true` tells the SDK to skip real Azure
-   auth entirely. `sb-emulator` in the endpoint is the container's DNS name on the
-   `orderflow` network, exactly like `sqlserver` and `redis`.
-
-## RabbitMQ vs Azure Service Bus
-
-| | RabbitMQ | Azure Service Bus |
-|---|---|---|
-| Model | AMQP broker, you design topology (exchanges, bindings, queues) yourself | Managed PaaS with opinionated primitives: queues, topics + **subscriptions** (each subscriber gets its own durable copy), sessions, scheduled messages |
-| Where it runs | Anywhere — a single lightweight container, or self-hosted in any cloud/on-prem | Azure-only in production; **locally you only get it via this emulator**, there's no "run it anywhere" story like RabbitMQ |
-| Delivery guarantees | At-least-once, you build retry/dead-lettering yourself (or via plugins) | At-least-once built in: automatic retries, dead-lettering, duplicate detection, sessions — all configurable per-queue (see the `Properties` in `Config.json`) |
-| SDK | `RabbitMQ.Client` (or MassTransit/NServiceBus on top) | `Azure.Messaging.ServiceBus` |
-| Cost model | Free/self-hosted, or pay for hosting infra | Pay-per-operation/tier in Azure |
-
-This repo already committed to Azure Service Bus (the `Azure.Messaging.ServiceBus`
-package was referenced in `Order.Infrastructure`/`Inventory.Infrastructure` before
-this Docker work started) — presumably because the target deployment is Azure, where
-you'd rather use the managed service than run/operate your own RabbitMQ cluster.
-The trade-off you're accepting locally is the emulator (heavier: needs its own SQL
-Edge companion, config file, less flexible) vs. how trivially a single `rabbitmq:
-3-management` container would have dropped in. If this project ever *doesn't* end up
-deployed to Azure, swapping to RabbitMQ would mean changing the Infrastructure/Messaging
-implementation, not just the Docker layer.
+So: `order-api`/`inventory-api` now talk to a plain `rabbitmq:3-management-alpine`
+container locally (`RabbitMq__Host`/`Username`/`Password` env vars), via
+`MassTransit.RabbitMQ`. RabbitMQ's transport fully auto-provisions its own
+topology, so none of the emulator's problems apply. `UsingAzureServiceBus` is
+still in the code, selected when `ASPNETCORE_ENVIRONMENT` isn't `Development` —
+real Azure Service Bus has no admin-client restriction, so that path is expected
+to work unmodified whenever this actually deploys to Azure. Management UI for
+the local broker: `http://localhost:15672` (same credentials as `RabbitMq__*`).
 
 ---
 
