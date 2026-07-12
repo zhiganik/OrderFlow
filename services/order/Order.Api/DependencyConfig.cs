@@ -1,6 +1,9 @@
 using FluentValidation;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using Order.Application.Dtos;
 using Order.Application.Interfaces;
 using Order.Application.Services;
 using Order.Application.Validators;
@@ -47,5 +50,22 @@ public static class DependencyConfig
 
         builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderRequestValidator>();
         builder.Services.AddFluentValidationAutoValidation();
+
+        builder.Services.Configure<ServiceBusOptions>(builder.Configuration.GetSection("ServiceBus"));
+
+        builder.Services.AddMassTransit(x =>
+        {
+            x.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+            {
+                o.UseSqlServer();
+                o.UseBusOutbox();
+            });
+
+            x.UsingAzureServiceBus((context, cfg) =>
+            {
+                var serviceBusOptions = context.GetRequiredService<IOptions<ServiceBusOptions>>().Value;
+                cfg.Host(serviceBusOptions.ConnectionString);
+            });
+        });
     }
 }

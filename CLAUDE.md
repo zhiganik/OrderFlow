@@ -10,9 +10,11 @@ Never reverse this — Application must never reference Infrastructure.
 
 ## Folders
 Application: Domain/, Dtos/, Interfaces/, Services/, Validators/
-Infrastructure: Persistence/, Repositories/, Messaging/ (Order & Inventory only),
-Outbox/ and Inbox/ (Order & Inventory only, both directions — Order also consumes
-the inventory result event back)
+Infrastructure: Persistence/, Repositories/, Messaging/ (Order & Inventory only,
+producer/consumer classes — Order also consumes the inventory result event back).
+No hand-rolled Outbox/Inbox folders: MassTransit's `AddEntityFrameworkOutbox` covers
+both, via `AddInboxStateEntity()`/`AddOutboxMessageEntity()`/`AddOutboxStateEntity()`
+called in each service's `DbContext.OnModelCreating`.
 
 ## Program.cs
 Two-stage Serilog init with try/catch/finally around host build and run (bootstrap
