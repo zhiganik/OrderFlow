@@ -26,7 +26,8 @@ COMPOSE := docker compose
 
 .PHONY: help env build up down down-v restart rebuild ps logs \
         logs-gateway logs-identity logs-order logs-inventory logs-sqlserver logs-sb \
-        sql-shell redis-cli sb-logs clean prune migrate-identity migrate-order migrate-inventory
+        sql-shell redis-cli sb-logs clean prune migrate-identity migrate-order migrate-inventory \
+        grant-admin seed-inventory
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -108,3 +109,10 @@ migrate-inventory: ## Apply pending Inventory EF Core migrations (manual step, n
 		--project services/inventory/Inventory.Infrastructure/Inventory.Infrastructure.csproj \
 		--startup-project services/inventory/Inventory.Api/Inventory.Api.csproj \
 		--context Inventory.Infrastructure.Persistence.InventoryDbContext
+
+grant-admin: ## Grant the Admin role to a user by email (usage: make grant-admin EMAIL=user@example.com)
+	MSYS_NO_PATHCONV=1 $(COMPOSE) exec sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$(MSSQL_SA_PASSWORD)" -C -d OrderFlowDb -Q \
+		"INSERT INTO [identity].AspNetUserRoles (UserId, RoleId) SELECT u.Id, r.Id FROM [identity].AspNetUsers u CROSS JOIN [identity].AspNetRoles r WHERE u.NormalizedEmail = UPPER(N'$(EMAIL)') AND r.Name = 'Admin' AND NOT EXISTS (SELECT 1 FROM [identity].AspNetUserRoles ur WHERE ur.UserId = u.Id AND ur.RoleId = r.Id);"
+
+seed-inventory: ## Seed ~100 sample StockItems through the real admin API (env overrides: SEED_COUNT, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD)
+	python scripts/seed_inventory.py
