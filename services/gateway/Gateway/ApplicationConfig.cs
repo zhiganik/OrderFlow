@@ -35,6 +35,8 @@ public static class ApplicationConfig
 
         app.UseHttpsRedirection();
 
+        app.UseCors(DependencyConfig.FrontendCorsPolicy);
+
         app.UseAuthentication();
         app.UseAuthorization();
 

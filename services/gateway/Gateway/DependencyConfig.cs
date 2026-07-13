@@ -12,10 +12,19 @@ namespace Gateway;
 
 public static class DependencyConfig
 {
+    public const string FrontendCorsPolicy = "Frontend";
+
     public static void ConfigureDependencies(this WebApplicationBuilder builder)
     {
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
+
+        var frontendOrigins = builder.Configuration.GetSection("Cors:FrontendOrigins").Get<string[]>()
+            ?? ["http://localhost:5173"];
+        builder.Services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy => policy
+            .WithOrigins(frontendOrigins)
+            .WithMethods("GET", "POST")
+            .WithHeaders("Authorization", "Content-Type", "Idempotency-Key")));
 
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
