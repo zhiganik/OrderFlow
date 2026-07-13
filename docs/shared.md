@@ -34,6 +34,7 @@ across the message bus.
 | `OrderCreatedEvent` | `OrderId`, `CustomerId`, `Items: OrderCreatedItem[ProductName, Quantity]`, `CreatedAt` | Order | Inventory |
 | `InventoryReservedEvent` | `OrderId`, `ReservedAt` | Inventory | Order |
 | `InventoryRejectedEvent` | `OrderId`, `Reason`, `RejectedAt` | Inventory | Order |
+| `OrderCanceledEvent` | `OrderId`, `Items: OrderCanceledItem[ProductName, Quantity]`, `CanceledAt` | Order | Inventory |
 
 ## Reference direction
 

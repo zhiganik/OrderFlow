@@ -51,4 +51,9 @@ public class StockItem
 
         QuantityAvailable -= quantity;
     }
+
+    public void Restock(int quantity)
+    {
+        QuantityAvailable += quantity;
+    }
 }

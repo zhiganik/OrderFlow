@@ -61,4 +61,14 @@ public class StockItemTests
 
         Assert.Throws<InvalidOperationException>(() => item.Reserve(11));
     }
+
+    [Test]
+    public void Restock_Increments()
+    {
+        var item = StockItem.Create("Widget", 10);
+
+        item.Restock(5);
+
+        Assert.That(item.QuantityAvailable, Is.EqualTo(15));
+    }
 }

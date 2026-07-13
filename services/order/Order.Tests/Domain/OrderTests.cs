@@ -50,4 +50,16 @@ public class OrderTests
         Assert.That(order.Status, Is.EqualTo(OrderStatus.Rejected));
         Assert.That(order.RejectionReason, Is.EqualTo("Out of stock."));
     }
+
+    [Test]
+    public void MarkCanceled_SetsStatusCanceledAndUpdatesTimestamp()
+    {
+        var order = OrderEntity.Create(Guid.NewGuid(), OneItem);
+        var before = order.UpdatedAt;
+
+        order.MarkCanceled();
+
+        Assert.That(order.Status, Is.EqualTo(OrderStatus.Canceled));
+        Assert.That(order.UpdatedAt, Is.GreaterThanOrEqualTo(before));
+    }
 }

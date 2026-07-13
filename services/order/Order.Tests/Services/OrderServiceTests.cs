@@ -173,4 +173,57 @@ public class OrderServiceTests
 
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Test]
+    public async Task CancelOrderAsync_ReservedOrder_CancelsAndPublishesEvent()
+    {
+        var order = OrderEntity.Create(Guid.NewGuid(), [("Widget", 2)]);
+        order.MarkReserved();
+        _orderRepository.Setup(r => r.FindByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
+
+        var result = await _sut.CancelOrderAsync(order.Id, CancellationToken.None);
+
+        Assert.That(result.Outcome, Is.EqualTo(CancelOrderOutcome.Canceled));
+        Assert.That(order.Status, Is.EqualTo(OrderStatus.Canceled));
+        _publishEndpoint.Verify(p => p.Publish(
+            It.Is<OrderFlow.Contracts.OrderCanceledEvent>(e => e.OrderId == order.Id && e.Items.Single().Quantity == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task CancelOrderAsync_OrderNotFound_ReturnsNotFound()
+    {
+        _orderRepository.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((OrderEntity?)null);
+
+        var result = await _sut.CancelOrderAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.That(result.Outcome, Is.EqualTo(CancelOrderOutcome.NotFound));
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestCase(OrderStatus.Pending)]
+    [TestCase(OrderStatus.Rejected)]
+    [TestCase(OrderStatus.Canceled)]
+    public async Task CancelOrderAsync_NotReserved_ReturnsInvalidStatusWithoutPublishingOrSaving(OrderStatus status)
+    {
+        var order = OrderEntity.Create(Guid.NewGuid(), [("Widget", 2)]);
+        switch (status)
+        {
+            case OrderStatus.Rejected:
+                order.MarkRejected("reason");
+                break;
+            case OrderStatus.Canceled:
+                order.MarkCanceled();
+                break;
+        }
+
+        _orderRepository.Setup(r => r.FindByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
+
+        var result = await _sut.CancelOrderAsync(order.Id, CancellationToken.None);
+
+        Assert.That(result.Outcome, Is.EqualTo(CancelOrderOutcome.InvalidStatus));
+        _publishEndpoint.Verify(p => p.Publish(It.IsAny<OrderFlow.Contracts.OrderCanceledEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

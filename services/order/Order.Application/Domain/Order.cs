@@ -48,4 +48,10 @@ public class Order
         RejectionReason = reason;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void MarkCanceled()
+    {
+        Status = OrderStatus.Canceled;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

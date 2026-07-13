@@ -53,4 +53,26 @@ public class OrdersController(IOrderService orderService, ICurrentUser currentUs
             _ => StatusCode(result.StatusCode, result.Order),
         };
     }
+
+    [HttpPost("orders/{id:guid}/cancel")]
+    public async Task<IActionResult> CancelOrder(Guid id, CancellationToken cancellationToken)
+    {
+        var order = await orderService.GetOrderByIdAsync(id, cancellationToken);
+
+        if (order is null || (!currentUser.IsAdmin && order.CustomerId != currentUser.UserId))
+        {
+            return NotFound();
+        }
+
+        var result = await orderService.CancelOrderAsync(id, cancellationToken);
+
+        return result.Outcome switch
+        {
+            CancelOrderOutcome.Canceled => Ok(result.Order),
+            CancelOrderOutcome.InvalidStatus => Problem(
+                title: $"Order cannot be canceled while in '{order.Status}' status.",
+                statusCode: StatusCodes.Status409Conflict),
+            _ => NotFound(),
+        };
+    }
 }

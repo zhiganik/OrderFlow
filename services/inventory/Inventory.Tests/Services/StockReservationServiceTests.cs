@@ -2,6 +2,7 @@ using Inventory.Application.Domain;
 using Inventory.Application.Interfaces;
 using Inventory.Application.Services;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 using Moq;
 using OrderFlow.Contracts;
 
@@ -21,11 +22,14 @@ public class StockReservationServiceTests
         _repository = new Mock<IStockItemRepository>();
         _unitOfWork = new Mock<IUnitOfWork>();
         _publishEndpoint = new Mock<IPublishEndpoint>();
-        _sut = new StockReservationService(_repository.Object, _unitOfWork.Object, _publishEndpoint.Object);
+        _sut = new StockReservationService(_repository.Object, _unitOfWork.Object, _publishEndpoint.Object, Mock.Of<ILogger<StockReservationService>>());
     }
 
     private static OrderCreatedEvent OrderCreated(params (string ProductName, int Quantity)[] items) =>
         new(Guid.NewGuid(), Guid.NewGuid(), items.Select(i => new OrderCreatedItem(i.ProductName, i.Quantity)).ToList(), DateTime.UtcNow);
+
+    private static OrderCanceledEvent OrderCanceled(params (string ProductName, int Quantity)[] items) =>
+        new(Guid.NewGuid(), items.Select(i => new OrderCanceledItem(i.ProductName, i.Quantity)).ToList(), DateTime.UtcNow);
 
     [Test]
     public async Task ReserveOrRejectAsync_SufficientStock_DecrementsAndPublishesReserved()
@@ -89,5 +93,28 @@ public class StockReservationServiceTests
         Assert.That(gadget.QuantityAvailable, Is.EqualTo(1));
         _publishEndpoint.Verify(p => p.Publish(It.IsAny<InventoryRejectedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         _publishEndpoint.Verify(p => p.Publish(It.IsAny<InventoryReservedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task RestockAsync_KnownProduct_IncrementsQuantityAndSaves()
+    {
+        var widget = StockItem.Create("Widget", 5);
+        _repository.Setup(r => r.FindByProductNamesAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([widget]);
+
+        await _sut.RestockAsync(OrderCanceled(("Widget", 3)), CancellationToken.None);
+
+        Assert.That(widget.QuantityAvailable, Is.EqualTo(8));
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task RestockAsync_UnknownProduct_SkipsItWithoutThrowing()
+    {
+        _repository.Setup(r => r.FindByProductNamesAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        Assert.DoesNotThrowAsync(() => _sut.RestockAsync(OrderCanceled(("Unknown", 3)), CancellationToken.None));
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

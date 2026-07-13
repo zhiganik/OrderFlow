@@ -56,6 +56,7 @@ public static class DependencyConfig
             });
 
             x.AddConsumer<OrderCreatedConsumer>();
+            x.AddConsumer<OrderCanceledConsumer>();
 
             x.AddConfigureEndpointsCallback((context, _, cfg) => cfg.UseEntityFrameworkOutbox<InventoryDbContext>(context));
 

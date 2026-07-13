@@ -27,4 +27,6 @@ public interface IOrderService
     Task MarkReservedAsync(Guid orderId, CancellationToken cancellationToken = default);
 
     Task MarkRejectedAsync(Guid orderId, string reason, CancellationToken cancellationToken = default);
+
+    Task<CancelOrderResult> CancelOrderAsync(Guid orderId, CancellationToken cancellationToken = default);
 }

@@ -139,6 +139,33 @@ public class OrderService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<CancelOrderResult> CancelOrderAsync(Guid orderId, CancellationToken cancellationToken = default)
+    {
+        var order = await orderRepository.FindByIdAsync(orderId, cancellationToken);
+        if (order is null)
+        {
+            return new CancelOrderResult { Outcome = CancelOrderOutcome.NotFound };
+        }
+
+        if (order.Status != OrderStatus.Reserved)
+        {
+            return new CancelOrderResult { Outcome = CancelOrderOutcome.InvalidStatus, Order = ToResponse(order) };
+        }
+
+        order.MarkCanceled();
+
+        await publishEndpoint.Publish(
+            new OrderCanceledEvent(
+                order.Id,
+                order.Items.Select(i => new OrderCanceledItem(i.ProductName, i.Quantity)).ToList(),
+                DateTime.UtcNow),
+            cancellationToken);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new CancelOrderResult { Outcome = CancelOrderOutcome.Canceled, Order = ToResponse(order) };
+    }
+
     private static OrderResponse ToResponse(OrderEntity order) => new()
     {
         Id = order.Id,
