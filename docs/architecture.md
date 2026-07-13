@@ -21,6 +21,9 @@ Full local-Docker setup and infra rationale (SQL Server, Redis, RabbitMQ,
 networking, why RabbitMQ instead of the Azure Service Bus emulator locally) is in
 [`DOCKER.md`](../DOCKER.md) — not duplicated here.
 
+Deploying this to Azure (Container Apps, Terraform, CI/CD) is covered
+separately in [`infrastructure-as-code.md`](infrastructure-as-code.md).
+
 ## Solution structure
 
 Each service under `services/{name}/` has four projects with a fixed reference
