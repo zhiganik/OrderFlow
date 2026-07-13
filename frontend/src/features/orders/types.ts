@@ -1,4 +1,4 @@
-export type OrderStatus = 'Pending' | 'Reserved' | 'Rejected'
+export type OrderStatus = 'Pending' | 'Reserved' | 'Rejected' | 'Canceled'
 
 export interface OrderItem {
   id: string

@@ -19,3 +19,9 @@ export function createOrder(payload: CreateOrderRequest) {
     headers: { 'Idempotency-Key': crypto.randomUUID() },
   })
 }
+
+export function cancelOrder(id: string) {
+  // Synchronous, unlike create — the response already carries the final
+  // Canceled state, no polling needed afterward.
+  return apiClient<Order>(`/order/orders/${id}/cancel`, { method: 'POST' })
+}
