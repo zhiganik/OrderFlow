@@ -111,20 +111,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear()
   }, [queryClient])
 
-  const doRefresh = useCallback(async (): Promise<string | null> => {
-    const refreshToken = stateRef.current.refreshToken
-    if (!refreshToken) {
-      clearAuth()
-      return null
-    }
-    try {
-      const result = await authApi.refresh({ refreshToken })
-      applyAuthResult(result)
-      return result.accessToken
-    } catch {
-      clearAuth()
-      return null
-    }
+  // Guards against concurrent callers issuing duplicate /refresh requests
+  // with the same (soon-to-be-stale) refresh token — the mount effect below
+  // and api-client's 401-retry path can both invoke this independently (e.g.
+  // React StrictMode double-firing the mount effect in dev).
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null)
+
+  const doRefresh = useCallback((): Promise<string | null> => {
+    refreshPromiseRef.current ??= (async () => {
+      const refreshToken = stateRef.current.refreshToken
+      if (!refreshToken) {
+        clearAuth()
+        return null
+      }
+      try {
+        const result = await authApi.refresh({ refreshToken })
+        applyAuthResult(result)
+        return result.accessToken
+      } catch {
+        clearAuth()
+        return null
+      }
+    })().finally(() => {
+      refreshPromiseRef.current = null
+    })
+    return refreshPromiseRef.current
   }, [applyAuthResult, clearAuth])
 
   // Wire the API client's module-level hooks synchronously during render,
