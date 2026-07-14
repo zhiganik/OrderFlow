@@ -65,6 +65,8 @@ services:
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=OrderFlowDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Serilog__WriteTo__1__Args__endpoint: ${SEQ_ENDPOINT}
+      Serilog__WriteTo__1__Args__headers__X-Seq-ApiKey: ${SEQ_API_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     # No `ports:` — only reachable from other containers on the `orderflow` network
     # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
@@ -91,6 +93,8 @@ services:
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Serilog__WriteTo__1__Args__endpoint: ${SEQ_ENDPOINT}
+      Serilog__WriteTo__1__Args__headers__X-Seq-ApiKey: ${SEQ_API_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     # No `ports:` — only reachable from other containers on the `orderflow` network
     # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
@@ -119,6 +123,8 @@ services:
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASSWORD}
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Serilog__WriteTo__1__Args__endpoint: ${SEQ_ENDPOINT}
+      Serilog__WriteTo__1__Args__headers__X-Seq-ApiKey: ${SEQ_API_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     # No `ports:` — only reachable from other containers on the `orderflow` network
     # (i.e. the gateway). Not published to the host, not reachable from outside Docker.
@@ -142,6 +148,8 @@ services:
     restart: unless-stopped
     environment:
       Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Serilog__WriteTo__1__Args__endpoint: ${SEQ_ENDPOINT}
+      Serilog__WriteTo__1__Args__headers__X-Seq-ApiKey: ${SEQ_API_KEY}
       ASPNETCORE_ENVIRONMENT: Development
     ports:
       - "8080:8080"

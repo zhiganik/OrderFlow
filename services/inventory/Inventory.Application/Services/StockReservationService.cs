@@ -29,6 +29,7 @@ public class StockReservationService(
 
         if (rejectionReason is not null)
         {
+            logger.LogInformation("Rejected order {OrderId}: {RejectionReason}", orderCreated.OrderId, rejectionReason);
             await publishEndpoint.Publish(new InventoryRejectedEvent(orderCreated.OrderId, rejectionReason, DateTime.UtcNow), cancellationToken);
             return;
         }
@@ -38,6 +39,7 @@ public class StockReservationService(
             byProductName[item.ProductName].Reserve(item.Quantity);
         }
 
+        logger.LogInformation("Reserved stock for order {OrderId} across {ItemCount} items", orderCreated.OrderId, orderCreated.Items.Count);
         await publishEndpoint.Publish(new InventoryReservedEvent(orderCreated.OrderId, DateTime.UtcNow), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
@@ -59,6 +61,7 @@ public class StockReservationService(
             stockItem.Restock(item.Quantity);
         }
 
+        logger.LogInformation("Restocked {ItemCount} items for canceled order {OrderId}", orderCanceled.Items.Count, orderCanceled.OrderId);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

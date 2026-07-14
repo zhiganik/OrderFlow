@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using OrderFlow.Shared.Middleware;
 using Serilog;
 using Yarp.ReverseProxy.Model;
 
@@ -11,6 +12,7 @@ public static class ApplicationConfig
         app.UseExceptionHandler();
         app.UseStatusCodePages();
 
+        app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseSerilogRequestLogging(options =>
         {
             options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>

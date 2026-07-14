@@ -13,9 +13,7 @@ try
 
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
-        .ReadFrom.Services(services)
-        .Enrich.FromLogContext()
-        .WriteTo.Console());
+        .ReadFrom.Services(services));
 
     builder.ConfigureDependencies();
 

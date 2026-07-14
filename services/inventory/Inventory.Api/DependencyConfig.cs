@@ -13,6 +13,7 @@ using Microsoft.OpenApi;
 using OrderFlow.Shared.Auth;
 using OrderFlow.Shared.Middleware;
 using OrderFlow.Shared.Swagger;
+using Serilog;
 using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
 
 namespace Inventory.Api;
@@ -21,8 +22,8 @@ public static class DependencyConfig
 {
     public static void ConfigureDependencies(this WebApplicationBuilder builder)
     {
-        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.AddProblemDetails();
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();

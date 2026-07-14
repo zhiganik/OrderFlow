@@ -31,9 +31,11 @@ public class OrderService(
         {
             if (existing.RequestHash != requestHash)
             {
+                logger.LogWarning("Idempotency key {IdempotencyKey} reused with a different request payload for customer {CustomerId}", idempotencyKey, customerId);
                 return new CreateOrderResult { Outcome = CreateOrderOutcome.Conflict, StatusCode = 409 };
             }
 
+            logger.LogInformation("Replayed cached response for idempotency key {IdempotencyKey} and customer {CustomerId}", idempotencyKey, customerId);
             return new CreateOrderResult
             {
                 Outcome = CreateOrderOutcome.ReplayedFromCache,
@@ -55,6 +57,7 @@ public class OrderService(
             CreatedAt = order.CreatedAt,
         });
 
+        logger.LogInformation("Order {OrderId} created for customer {CustomerId} with {ItemCount} items", order.Id, order.CustomerId, order.Items.Count);
         await publishEndpoint.Publish(
             new OrderCreatedEvent(
                 order.Id,
@@ -123,6 +126,7 @@ public class OrderService(
         }
 
         order.MarkReserved();
+        logger.LogInformation("Order {OrderId} marked as reserved", orderId);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
@@ -136,6 +140,7 @@ public class OrderService(
         }
 
         order.MarkRejected(reason);
+        logger.LogInformation("Order {OrderId} marked as rejected: {RejectionReason}", orderId, reason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 

@@ -13,6 +13,7 @@ using Order.Infrastructure.Repositories;
 using OrderFlow.Shared.Auth;
 using OrderFlow.Shared.Middleware;
 using OrderFlow.Shared.Swagger;
+using Serilog;
 using SharpGrip.FluentValidation.AutoValidation.Mvc.Extensions;
 
 namespace Order.Api;

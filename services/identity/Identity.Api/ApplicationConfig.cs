@@ -1,3 +1,4 @@
+using OrderFlow.Shared.Middleware;
 using Serilog;
 
 namespace Identity.Api;
@@ -8,6 +9,7 @@ public static class ApplicationConfig
     {
         app.UseExceptionHandler();
 
+        app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseSerilogRequestLogging(options =>
         {
             options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
